@@ -34,3 +34,14 @@ Plans for the project:
   * Should not look like crap
   * 3D mode????
   * (Longshot) Convert photo of Go game into SGF and score it. Use OpenCV?
+
+# Contributing
+
+If you send me a pull request and I like it, I'll merge it. Don't worry
+about making it perfect, this isn't a professional thing.
+
+# License
+
+This code is licensed under my slightly custom version of the WTFPL, which is
+also a slightly custom version of the WTFNMFPL. See the COPYING file
+for details.
