@@ -25,6 +25,9 @@ Plans for the project:
   * Bot code may depend on the core Go routines, but not on anything else. Thus it can be packaged separately from the client, if desired.
   * Should be able to interface with other clients and/or other bots.
   * Initial bot will probably be random-play bot. Would like to try doing a MCTS bot, or even train a bot with a deep net and combine it with the MCTS bot.
+  * Should allow user to restrict the AI to a subsection of the board
+  * Should allow user to force the AI to only pass IFF all possibile moves are bad.
+  * Should allow user to force the AI to never resign.
 * Go client made in SDL2
   * Should support local play
     * Optional board rotation on white's move
@@ -34,6 +37,7 @@ Plans for the project:
   * Should not look like crap
   * 3D mode????
   * (Longshot) Convert photo of Go game into SGF and score it. Use OpenCV?
+  * Should support arbitrary stone placement, numbering, with options for AI responses.
 
 # Contributing
 
