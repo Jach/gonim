@@ -8,6 +8,8 @@ from sdlwrap/sdlwrap as sdlwrap import nil
 from sdlwrap/sdlwrap import fill, createScreenRenderer, createCenteredWindow,
   getKeyValue
 
+import goban
+
 var
   window: WindowPtr
   screen: RendererPtr
@@ -15,6 +17,8 @@ var
   event = sdl2.defaultEvent
 
 proc play() =
+  var game_board = newGoban()
+
   var run = true
   while run:
     fpsman.delay()
