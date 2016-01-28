@@ -1,5 +1,5 @@
 ## Graphical game board.
-## Should listen to mouse events (hover, click) and store an internal game representation.
+## Should respond to mouse events (hover, click) and store an internal game representation.
 
 import sdl2
 
@@ -15,3 +15,9 @@ type
 
 proc newGoban*(): Goban =
   new(result)
+  # Plan: grab bg image from assets folder (I like seamlesstexture26_1200.jpg for
+  # some reason). Draw the grid marks on it and star points. Then resize.
+  # Would be good to support window resizing too.
+
+proc update*(self: var Goban) =
+  let pos = getMouseLocation()

@@ -12,3 +12,18 @@ proc isKeyPressed*(scanCode: ScanCode): bool =
   ## returns whether that key is currently pressed.
   return getKeyboardState()[scanCode.ord] != 0
 
+proc getMouseLocation*(): (int, int) =
+  var
+    x:cint = 0
+    y:cint = 0
+  getMouseState(addr(x), addr(y))
+  return (x.int, y.int)
+
+proc isLeftMouseButtonPressed*(): bool =
+  return (getMouseState(nil, nil) and SDL_BUTTON(BUTTON_LEFT)) == 1
+
+proc isRightMouseButtonPressed*(): bool =
+  return (getMouseState(nil, nil) and SDL_BUTTON(BUTTON_RIGHT)) == 1
+
+proc isMiddleMouseButtonPressed*(): bool =
+  return (getMouseState(nil, nil) and SDL_BUTTON(BUTTON_MIDDLE)) == 1
