@@ -146,10 +146,12 @@ proc get_group_positions*(board: BoardRep, startContent: (BoardContent, (int, in
 
 proc count_liberties*(board: BoardRep, group_positions: seq[(int,int)]): int =
   result = 0
+  var seen = initSet[(int,int)]()
   for pos in group_positions:
     for neighbor in get_neighbors(board, pos):
-      if neighbor[0] == Empty:
+      if neighbor[0] == Empty and not seen.contains(neighbor[1]):
         result += 1
+        seen.incl(neighbor[1])
 
 proc move_captures_stones*(board: BoardRep, content: BoardContent,
                           pos: (int, int)): seq[(int,int)] =
@@ -303,6 +305,9 @@ when isMainModule:
     let last_caps = board.captures_by_white
     assert board.make_move(White, (4,1)).isNone()
     assert last_caps + 4 == board.captures_by_white
+
+    assert board.make_move(White, (9,11)).isNone()
+    assert board.count_liberties(board.get_group_positions((White, (9,11)))) == 7
   except:
     let e = getCurrentException()
     echo("Assertion Failed: ", e.msg)
