@@ -51,9 +51,10 @@
 ## Anyway, let's get on with it.
 
 import tables
+import sets
 import options
 from math import sqrt
-from strutils import repeat
+from strutils import repeat, split
 import sequtils
 
 var
@@ -95,8 +96,8 @@ proc `$`(board: BoardRep):string =
                  of Black: "B"
                  of White: "W"
                  of Edge: "WTF are you doing?")
-    if y < size:
-      result.add("\n")
+    #if y < size:
+    result.add("\n")
   return result
 
 proc make_board_rep*(size:int = 19): BoardRep =
@@ -111,13 +112,42 @@ proc make_board_rep*(size:int = 19): BoardRep =
       result.board[(x, y)] = Empty
   return result
 
-proc get_neighbors*(board: BoardRep, pos: (int, int)): seq[BoardContent] =
-  ## Returns the 4 neighbor points' contents, ordered by top, right, bottom, left.
+proc get_neighbors*(board: BoardRep, pos: (int, int)): seq[(BoardContent, (int, int))] =
+  ## Returns the 4 neighbor points' contents as a list of pairs of BoardContent
+  ## and the location, ordered by top, right, bottom, left.
   ## If a neighbor is on an edge, the value of that neighbor will be Edge.
-  result = @[board[(pos[0], pos[1]-1)],
-    board[(pos[0]+1, pos[1])],
-    board[(pos[0], pos[1]+1)],
-    board[(pos[0]-1, pos[1])]]
+  let
+    t = (pos[0], pos[1]-1)
+    r = (pos[0]+1, pos[1])
+    b = (pos[0], pos[1]+1)
+    l = (pos[0]-1, pos[1])
+  result = @[(board[t], t),
+    (board[r], r),
+    (board[b], b),
+    (board[l], l)]
+
+proc get_group_positions*(board: BoardRep, startContent: (BoardContent, (int, int))): seq[(int,int)] =
+  let (start_content, start_pos) = startContent
+  result = @[start_pos]
+
+  var seen = initSet[(int,int)]()
+  seen.incl(start_pos)
+
+  var frontier = get_neighbors(board, start_pos)
+  while frontier.len() > 0:
+    let (content, pos) = frontier.pop()
+    if content == start_content and not seen.contains(pos):
+      seen.incl(pos)
+      result.add(pos)
+      for neighbor in get_neighbors(board, pos):
+        frontier.add(neighbor)
+
+proc count_liberties*(board: BoardRep, group_positions: seq[(int,int)]): int =
+  result = 0
+  for pos in group_positions:
+    for neighbor in get_neighbors(board, pos):
+      if neighbor[0] == Empty:
+        result += 1
 
 proc move_captures_stones*(board: BoardRep, content: BoardContent,
                           pos: (int, int)): seq[(int,int)] =
@@ -125,6 +155,18 @@ proc move_captures_stones*(board: BoardRep, content: BoardContent,
   ## the captured stones. An empty list therefore means this move would not
   ## capture stones.
   result = @[]
+  let neighbors = get_neighbors(board, pos)
+  let opposite = if content == Black: White
+                 else: Black
+  # if any neighbors are opposite of content, get that content's group,
+  # check its liberties, and if it is equal to 1, then this stone kills
+  # that group. Add the coordinates of that group to the results list.
+  for neighbor in neighbors:
+    if neighbor[0] == opposite:
+      let group = get_group_positions(board, neighbor)
+      let liberties = count_liberties(board, group)
+      if liberties == 1:
+        result.add(group)
 
 proc check_ko*(board: BoardRep, content: BoardContent,
                position: (int, int)): Option[InvalidMoveReason] =
@@ -139,8 +181,9 @@ proc check_superko*(board: BoardRep, content: BoardContent,
 proc check_suicide*(board: BoardRep, content: BoardContent,
                     position: (int, int)): Option[InvalidMoveReason] =
   if not any(get_neighbors(board, position),
-             proc (neighbor: BoardContent): bool =
-               return neighbor == content or neighbor == Empty) and
+             proc (neighbor: (BoardContent, (int, int))): bool =
+               let c = neighbor[0]
+               return c == content or c == Empty) and
       board[position] != EDGE and
       move_captures_stones(board, content, position).len() == 0:
     return some(SUICIDE)
@@ -168,7 +211,8 @@ proc is_valid_move*(board: BoardRep, content: BoardContent,
       return check
 
 proc make_move*(board: var BoardRep, content: BoardContent,
-                position: (int, int)): Option[InvalidMoveReason] =
+                position: (int, int),
+                printAfterMove: bool = true): Option[InvalidMoveReason] =
   ## Updates the given board with the given content (a stone or an empty space)
   ## at the given position. If successful, the return value will be none,
   ## and the board will have been mutated (captured stones removed) to reflect a legal
@@ -181,35 +225,55 @@ proc make_move*(board: var BoardRep, content: BoardContent,
   ## every move.
   result = is_valid_move(board, content, position)
   if result.isNone:
+    # TODO: refresh memory on differences between var, ref, empty qualifier for
+    # args like board. What is efficient?
+    # TODO: no reason to calculate move_captures_stones twice. :(
+
+    # Remove captured stones first!
+    for capture_pos in move_captures_stones(board, content, position):
+      board.board[capture_pos] = Empty
+
+    if printAfterMove:
+      echo(content, " played ", position[0], ",", position[1])
     board.board[position] = content
     board.move_history.add((position, content))
-    # remove dead stones
+    if printAfterMove:
+      echo board
 
 when isMainModule:
   var board = make_board_rep()
 
-  assert board.make_move(Black, (3,4)).isNone()
+  try:
+    assert board.make_move(Black, (3,4)).isNone()
 
-  assert board.make_move(Black, (3,4)).get() == TAKEN_SPACE
-  assert board.make_move(White, (3,4)).get() == TAKEN_SPACE
+    assert board.make_move(Black, (3,4)).get() == TAKEN_SPACE
+    assert board.make_move(White, (3,4)).get() == TAKEN_SPACE
 
-  assert board.make_move(Black, (-1,1)).get() == OUTSIDE_BOARD
-  assert board.make_move(Black, (0,1)).get() == OUTSIDE_BOARD
-  assert board.make_move(Black, (1,-1)).get() == OUTSIDE_BOARD
-  assert board.make_move(Black, (1,0)).get() == OUTSIDE_BOARD
-  assert board.make_move(Black, (20,19)).get() == OUTSIDE_BOARD
-  assert board.make_move(Black, (19,20)).get() == OUTSIDE_BOARD
+    assert board.make_move(Black, (-1,1)).get() == OUTSIDE_BOARD
+    assert board.make_move(Black, (0,1)).get() == OUTSIDE_BOARD
+    assert board.make_move(Black, (1,-1)).get() == OUTSIDE_BOARD
+    assert board.make_move(Black, (1,0)).get() == OUTSIDE_BOARD
+    assert board.make_move(Black, (20,19)).get() == OUTSIDE_BOARD
+    assert board.make_move(Black, (19,20)).get() == OUTSIDE_BOARD
 
-  assert board.make_move(White, (9,10)).isNone()
-  assert board.make_move(White, (11,10)).isNone()
-  assert board.make_move(White, (10,9)).isNone()
-  assert board.make_move(White, (10,11)).isNone()
-  assert board.make_move(Black, (10,10)).get() == SUICIDE
+    assert board.make_move(White, (9,10)).isNone()
+    assert board.make_move(White, (11,10)).isNone()
+    assert board.make_move(White, (10,9)).isNone()
+    assert board.make_move(White, (10,11)).isNone()
+    assert board.make_move(Black, (10,10)).get() == SUICIDE
 
-  assert board.make_move(White, (1,2)).isNone()
-  assert board.make_move(White, (2,1)).isNone()
-  assert board.make_move(Black, (1,1)).get() == SUICIDE
-  assert board.make_move(Black, (2,2)).isNone()
-  assert board.make_move(Black, (3,1)).isNone()
-  assert board.make_move(Black, (1,1)).isNone() # not suicide
-  echo($board)
+    assert board.make_move(White, (1,2)).isNone()
+    assert board.make_move(White, (2,1)).isNone()
+    assert board.make_move(Black, (1,1)).get() == SUICIDE
+    assert board.make_move(Black, (2,2)).isNone()
+    assert board.make_move(Black, (3,1)).isNone()
+    assert board.make_move(Black, (1,1)).isNone() # not suicide
+
+    assert board.make_move(White, (2,1)).get() == KO
+  except:
+    let e = getCurrentException()
+    echo("Assertion Failed: ", e.msg)
+    let trace = repr(e).split("\n")[4..^2]
+    for line in trace:
+      echo("    ", line[1..^5])
+  echo("\nFinal board state:\n", $board)
