@@ -58,7 +58,7 @@ from strutils import repeat, split
 import sequtils
 
 var
-  usingSuperKo* = true ## Modify to change whether make_move considers super-ko.
+  usingSuperKo* = false ## Modify to change whether make_move considers super-ko.
 
 type
   BoardContent* = enum
@@ -70,6 +70,7 @@ type
     board: Table[(int, int), BoardContent]
     size: int
     move_history: seq[((int, int), BoardContent)]
+    last_board_copy: BoardRep
     captures_by_black: int
     captures_by_white: int
   InvalidMoveReason* = enum
@@ -110,6 +111,7 @@ proc make_board_rep*(size:int = 19): BoardRep =
   for x in 1..size:
     for y in 1..size:
       result.board[(x, y)] = Empty
+  result.last_board_copy = new BoardRep
   return result
 
 proc get_neighbors*(board: BoardRep, pos: (int, int)): seq[(BoardContent, (int, int))] =
@@ -168,10 +170,17 @@ proc move_captures_stones*(board: BoardRep, content: BoardContent,
       if liberties == 1:
         result.add(group)
 
+# declare
+proc make_move_nochecks(board: BoardRep, content: BoardContent, position: (int, int), printAfterMove: bool = false)
+
 proc check_ko*(board: BoardRep, content: BoardContent,
                position: (int, int)): Option[InvalidMoveReason] =
-  if false:
-    return some(KO)
+  if board[position] == Empty: # temp checks against other constraints. we'll need to order these instead of a naive loop.
+    var board_copy = make_board_rep(board.size)
+    board_copy.board = board.board
+    make_move_nochecks(board_copy, content, position)
+    if board_copy.board == board.last_board_copy.board: # ko!
+      result = some(KO)
 
 proc check_superko*(board: BoardRep, content: BoardContent,
                     position: (int, int)): Option[InvalidMoveReason] =
@@ -210,7 +219,34 @@ proc is_valid_move*(board: BoardRep, content: BoardContent,
     if check.isSome:
       return check
 
-proc make_move*(board: var BoardRep, content: BoardContent,
+proc make_move_nochecks(board: BoardRep, content: BoardContent,
+                position: (int, int),
+                printAfterMove: bool = false) =
+    # TODO: refresh memory on differences between var, ref, empty qualifier for
+    # args like board. What is efficient?
+    # TODO: no reason to calculate move_captures_stones twice. :(
+
+    var board_copy = make_board_rep(board.size) # fsck do it live!
+    board_copy.board = board.board
+    board.last_board_copy= board_copy
+
+    # Remove captured stones first!
+    let captures = move_captures_stones(board, content, position)
+    for capture_pos in captures:
+      board.board[capture_pos] = Empty
+    if content == Black:
+      board.captures_by_black += captures.len()
+    elif content == White:
+      board.captures_by_white += captures.len()
+
+    if printAfterMove:
+      echo(content, " played ", position[0], ",", position[1])
+    board.board[position] = content
+    board.move_history.add((position, content))
+    if printAfterMove:
+      echo board
+
+proc make_move*(board: BoardRep, content: BoardContent,
                 position: (int, int),
                 printAfterMove: bool = true): Option[InvalidMoveReason] =
   ## Updates the given board with the given content (a stone or an empty space)
@@ -223,22 +259,11 @@ proc make_move*(board: var BoardRep, content: BoardContent,
   ## that way, history comes for free, and checking ko/superko is just a list walk
   ## with lots of shared pointers so we don't have to copy the whole 19x19 game
   ## every move.
+  ## TODO: option type was a fun idea to experiment with, but many issues.
+  ## Should instead return a set of errors.
   result = is_valid_move(board, content, position)
   if result.isNone:
-    # TODO: refresh memory on differences between var, ref, empty qualifier for
-    # args like board. What is efficient?
-    # TODO: no reason to calculate move_captures_stones twice. :(
-
-    # Remove captured stones first!
-    for capture_pos in move_captures_stones(board, content, position):
-      board.board[capture_pos] = Empty
-
-    if printAfterMove:
-      echo(content, " played ", position[0], ",", position[1])
-    board.board[position] = content
-    board.move_history.add((position, content))
-    if printAfterMove:
-      echo board
+    make_move_nochecks(board, content, position, printAfterMove)
 
 when isMainModule:
   var board = make_board_rep()
@@ -270,6 +295,14 @@ when isMainModule:
     assert board.make_move(Black, (1,1)).isNone() # not suicide
 
     assert board.make_move(White, (2,1)).get() == KO
+
+    assert board.make_move(White, (2,3)).isNone()
+    assert board.make_move(Black, (2,1)).isNone()
+    assert board.make_move(White, (3,2)).isNone()
+    assert board.make_move(Black, (1,10)).isNone()
+    let last_caps = board.captures_by_white
+    assert board.make_move(White, (4,1)).isNone()
+    assert last_caps + 4 == board.captures_by_white
   except:
     let e = getCurrentException()
     echo("Assertion Failed: ", e.msg)
@@ -277,3 +310,5 @@ when isMainModule:
     for line in trace:
       echo("    ", line[1..^5])
   echo("\nFinal board state:\n", $board)
+  echo("Captures by black: ", board.captures_by_black)
+  echo("Captures by white: ", board.captures_by_white)
