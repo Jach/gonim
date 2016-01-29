@@ -1,6 +1,7 @@
 ## Data structure for an internal goban, procedures to modify it while being in
 ## accordance with the rules.
 ## First pass, simple hash table specified by (x,y) int-pairs.
+## (Update: now 'table-like', provides [] access but also has other props.)
 ## The "origin" is the top-left from Black's perspective at (1,1).
 ## This is just for internal rep now, how it gets displayed to the user
 ## is a different problem.
@@ -50,52 +51,149 @@
 ## Anyway, let's get on with it.
 
 import tables
+import options
 from math import sqrt
 from strutils import repeat
+import sequtils
+
+var
+  usingSuperKo* = true ## Modify to change whether make_move considers super-ko.
 
 type
   BoardContent* = enum
     Empty,
     Black,
-    White
-  BoardRep* = Table[(int, int), BoardContent]
+    White,
+    Edge
+  BoardRep* = ref object of RootObj
+    board: Table[(int, int), BoardContent]
+    size: int
+    move_history: seq[((int, int), BoardContent)]
+    captures_by_black: int
+    captures_by_white: int
+  InvalidMoveReason* = enum
+    ## Possible reasons for an invalid move.
+    KO,
+    SUPERKO,
+    SUICIDE,
+    TAKEN_SPACE,
+    OUTSIDE_BOARD
 
-var
-  usingSuperKo* = true ## Modify to change whether make_move considers super-ko.
-
-proc size(board: BoardRep):int =
-  return sqrt(board.len().float).int
+proc `[]`(board: BoardRep, position: (int,int)): BoardContent =
+  if position[0] < 1 or position[1] < 1 or
+      position[0] > board.size or position[1] > board.size:
+    return Edge
+  return board.board[position]
 
 proc `$`(board: BoardRep):string =
-  let size = board.size()
+  let size = board.size
   result = ""
   for y in 1..size:
     for x in 1..size:
       result.add(case board[(x, y)]
                  of Empty: "+"
                  of Black: "B"
-                 of White: "W")
+                 of White: "W"
+                 of Edge: "WTF are you doing?")
     if y < size:
       result.add("\n")
   return result
 
 proc make_board_rep*(size:int = 19): BoardRep =
-  result = initTable[(int, int), BoardContent]()
+  new(result)
+  result.board = initTable[(int, int), BoardContent]()
+  result.size = size
+  result.move_history = @[]
+  result.captures_by_black = 0
+  result.captures_by_white = 0
   for x in 1..size:
     for y in 1..size:
-      result[(x, y)] = Empty
+      result.board[(x, y)] = Empty
   return result
 
+proc get_neighbors*(board: BoardRep, pos: (int, int)): seq[BoardContent] =
+  ## Returns the 4 neighbor points' contents, ordered by top, right, bottom, left.
+  ## If a neighbor is on an edge, the value of that neighbor will be Edge.
+  result = @[board[(pos[0], pos[1]-1)],
+    board[(pos[0]+1, pos[1])],
+    board[(pos[0], pos[1]+1)],
+    board[(pos[0]-1, pos[1])]]
+
+proc check_ko*(board: BoardRep, content: BoardContent,
+               position: (int, int)): Option[InvalidMoveReason] =
+  if false:
+    return some(KO)
+
+proc check_superko*(board: BoardRep, content: BoardContent,
+                    position: (int, int)): Option[InvalidMoveReason] =
+  if false:
+    return some(KO)
+
+proc check_suicide*(board: BoardRep, content: BoardContent,
+                    position: (int, int)): Option[InvalidMoveReason] =
+  if not any(get_neighbors(board, position),
+             proc (neighbor: BoardContent): bool =
+               return neighbor == content or neighbor == Empty or neighbor == Edge):
+    return some(SUICIDE)
+
+proc check_taken_space*(board: BoardRep, content: BoardContent,
+                        position: (int, int)): Option[InvalidMoveReason] =
+  if board[position] != Empty and board[position] != Edge:
+    return some(TAKEN_SPACE)
+
+proc check_outside_board*(board: BoardRep, content: BoardContent,
+                          position: (int, int)): Option[InvalidMoveReason] =
+  if board[position] == Edge:
+    return some(OUTSIDE_BOARD)
+
 proc is_valid_move*(board: BoardRep, content: BoardContent,
-                    position: (int, int)): bool =
-  true
+                    position: (int, int)): Option[InvalidMoveReason] =
+  for reason in ord(low(InvalidMoveReason))..ord(high(InvalidMoveReason)):
+    let check = case InvalidMoveReason(reason)
+                of KO: check_ko(board, content, position)
+                of SUPERKO: check_superko(board, content, position)
+                of SUICIDE: check_suicide(board, content, position)
+                of TAKEN_SPACE: check_taken_space(board, content, position)
+                of OUTSIDE_BOARD: check_outside_board(board, content, position)
+    if check.isSome:
+      return check
 
 proc make_move*(board: var BoardRep, content: BoardContent,
-                position: (int, int)) =
-  if is_valid_move(board, content, position):
-    board[position] = content
+                position: (int, int)): Option[InvalidMoveReason] =
+  ## Updates the given board with the given content (a stone or an empty space)
+  ## at the given position. If successful, the return value will be none,
+  ## and the board will have been mutated (captured stones removed) to reflect a legal
+  ## game. 
+  ##
+  ## note to self: this mutating board is terrible...
+  ## TODO: refactor table into an immutable data structure.
+  ## that way, history comes for free, and checking ko/superko is just a list walk
+  ## with lots of shared pointers so we don't have to copy the whole 19x19 game
+  ## every move.
+  result = is_valid_move(board, content, position)
+  if result.isNone:
+    board.board[position] = content
+    board.move_history.add((position, content))
+    # remove dead stones
 
 when isMainModule:
   var board = make_board_rep()
-  board.make_move(Black, (3,4))
+
+  assert board.make_move(Black, (3,4)).isNone()
+
+  assert board.make_move(Black, (3,4)).get() == TAKEN_SPACE
+  assert board.make_move(White, (3,4)).get() == TAKEN_SPACE
+
+  assert board.make_move(Black, (-1,1)).get() == OUTSIDE_BOARD
+  assert board.make_move(Black, (0,1)).get() == OUTSIDE_BOARD
+  assert board.make_move(Black, (1,-1)).get() == OUTSIDE_BOARD
+  assert board.make_move(Black, (1,0)).get() == OUTSIDE_BOARD
+  assert board.make_move(Black, (20,19)).get() == OUTSIDE_BOARD
+  assert board.make_move(Black, (19,20)).get() == OUTSIDE_BOARD
+
+  assert board.make_move(White, (9,10)).isNone()
+  assert board.make_move(White, (11,10)).isNone()
+  assert board.make_move(White, (10,9)).isNone()
+  assert board.make_move(White, (10,11)).isNone()
+  assert board.make_move(Black, (10,10)).get() == SUICIDE
   echo($board)
