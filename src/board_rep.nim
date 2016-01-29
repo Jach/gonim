@@ -119,6 +119,13 @@ proc get_neighbors*(board: BoardRep, pos: (int, int)): seq[BoardContent] =
     board[(pos[0], pos[1]+1)],
     board[(pos[0]-1, pos[1])]]
 
+proc move_captures_stones*(board: BoardRep, content: BoardContent,
+                          pos: (int, int)): seq[(int,int)] =
+  ## If this move would capture stones, return a list of coordinates of
+  ## the captured stones. An empty list therefore means this move would not
+  ## capture stones.
+  result = @[]
+
 proc check_ko*(board: BoardRep, content: BoardContent,
                position: (int, int)): Option[InvalidMoveReason] =
   if false:
@@ -126,14 +133,16 @@ proc check_ko*(board: BoardRep, content: BoardContent,
 
 proc check_superko*(board: BoardRep, content: BoardContent,
                     position: (int, int)): Option[InvalidMoveReason] =
-  if false:
-    return some(KO)
+  if false and usingSuperko:
+    return some(SUPERKO)
 
 proc check_suicide*(board: BoardRep, content: BoardContent,
                     position: (int, int)): Option[InvalidMoveReason] =
   if not any(get_neighbors(board, position),
              proc (neighbor: BoardContent): bool =
-               return neighbor == content or neighbor == Empty or neighbor == Edge):
+               return neighbor == content or neighbor == Empty) and
+      board[position] != EDGE and
+      move_captures_stones(board, content, position).len() == 0:
     return some(SUICIDE)
 
 proc check_taken_space*(board: BoardRep, content: BoardContent,
@@ -196,4 +205,11 @@ when isMainModule:
   assert board.make_move(White, (10,9)).isNone()
   assert board.make_move(White, (10,11)).isNone()
   assert board.make_move(Black, (10,10)).get() == SUICIDE
+
+  assert board.make_move(White, (1,2)).isNone()
+  assert board.make_move(White, (2,1)).isNone()
+  assert board.make_move(Black, (1,1)).get() == SUICIDE
+  assert board.make_move(Black, (2,2)).isNone()
+  assert board.make_move(Black, (3,1)).isNone()
+  assert board.make_move(Black, (1,1)).isNone() # not suicide
   echo($board)
