@@ -11,9 +11,13 @@
 ## classical notation of (x, y) when x or y are > 10.
 ##
 ## The system is to give each quadrant a name, bottom-left, top-left, etc. BL for short.
-## The name of the quadrant is always from the perspective of the player, so in
-## recording a move, you would start with "W TL" to specify white playing on her top left
-## quadrant.
+## The name of the quadrant is always from the perspective of the player -- maybe.
+## Kifus are generally memorized from black's perspective, so it's straightforward
+## from a recorder / playbacker to go with this convention, but if white is also
+## recording the game may be a bit confusing if we don't have player-dependent quadrants.
+## As long as the convention is stated, there's no ambiguity.. In recording
+## a move, you would start with "W TL" to specify white playing on her top left quadrant.
+## Or from black's perspective, BR for bottom right.
 ## Within each quadrant, the (x, y) origin of (1, 1) is at...
 ## I'm not fully committed to whether it should always be at the bottom left (as common
 ## school math suggests), the top left, or quadrant-dependent so that it's always at
@@ -27,16 +31,17 @@
 ## (-1,-1).
 ## For a given x = 5, x = -5 is directly to the left.
 ##
-## Compare this common joseki:
+## Compare this common joseki with quadrants with respect to black:
 ## B TR 4,4
 ## W TR 6,3
 ## B TR 3,6
 ## W TR 4,2
 ## B TR 3,3
+## W TR 9,3
 ##
 ## vs more standard:
 ## B Q16
-## W Q17
+## W O17
 ## B R14
 ## W Q18
 ## B R17
